@@ -17,7 +17,71 @@
 (defn pid-file [name pid-dir]
   (str pid-dir "/" name ".pid"))
 
-;; ── 프로세스 시작 (setsid — 세션 분리) ──────────────────────────────
+;; ═══════════════════════════════════════════════════════════════════
+;; EVENT TIMELINE
+;; ─────────────────────────────────────────────────────────────────
+;; 모든 프로세스 생명주기 이벤트를 JSONL로 기록.
+;; 형식: {"ts":ms, "service":"name", "event":"type", "reason":"...", "restart_count":n}
+;; ═══════════════════════════════════════════════════════════════════
+
+(defn tl-log-path [log-dir]
+  (str log-dir "/events.jsonl"))
+
+(defn tl-append! [log-dir service event-type reason restart-count]
+  (let [entry (json-stringify
+                {"ts"            (now-ms)
+                 "service"       service
+                 "event"         event-type
+                 "reason"        reason
+                 "restart_count" restart-count})]
+    (file-append (tl-log-path log-dir) (str entry "\n"))))
+
+;; JSONL 파일 전체 읽기 → 이벤트 배열 (파일 없으면 빈 배열)
+(defn tl-read-all [log-dir]
+  (let [path (tl-log-path log-dir)
+        raw  (try (file-read path) (catch err nil))]
+    (if (nil-or-empty? raw)
+      []
+      (let [lines (filter (fn [l] (not (str-blank? l)))
+                          (str-split raw "\n"))]
+        (filter (fn [e] (not (nil? e)))
+                (map (fn [l]
+                       (try (json-parse l) (catch err nil)))
+                     lines))))))
+
+;; 최근 n개 이벤트
+(defn tl-last [log-dir n]
+  (let [all   (tl-read-all log-dir)
+        total (length all)
+        start (if (> total n) (- total n) 0)]
+    (drop start all)))
+
+;; 특정 서비스 이벤트만 필터
+(defn tl-by-service [log-dir service-name]
+  (filter (fn [e] (= (get e "service") service-name))
+          (tl-read-all log-dir)))
+
+;; 타임라인 텍스트 렌더링 (터미널용)
+(defn tl-render [events]
+  (str-join "\n"
+    (map (fn [e]
+           (let [ts      (get e "ts")
+                 sec     (floor (/ ts 1000))
+                 ms-part (mod ts 1000)
+                 hh      (str-pad-left (str (mod (floor (/ sec 3600)) 24)) 2 "0")
+                 mm      (str-pad-left (str (mod (floor (/ sec 60)) 60)) 2 "0")
+                 ss      (str-pad-left (str (mod sec 60)) 2 "0")
+                 svc     (get e "service")
+                 evt     (get e "event")
+                 reason  (or (get e "reason") "")
+                 rc      (get e "restart_count")]
+             (str "[" hh ":" mm ":" ss "] "
+                  svc " — " evt
+                  (if (str-blank? reason) "" (str " (" reason ")"))
+                  (if (> rc 0) (str " #" rc) ""))))
+         events)))
+
+;; ── 프로세스 시작 ────────────────────────────────────────────────────
 (defn pm-start [proc log-dir pid-dir]
   (let [name    (get proc "name")
         cmd     (get proc "cmd")
@@ -62,7 +126,7 @@
       (let [result (shell-exec-result (str "wget -q -O /dev/null --timeout=2 '" health-url "' 2>/dev/null"))]
         (get result "ok")))))
 
-;; ── 메트릭 기록 ──────────────────────────────────────────────────────
+;; ── 메트릭 기록 (숫자 시계열) ────────────────────────────────────────
 ;; event-code: 0.0=정상 1.0=재시작 2.0=최대재시작초과
 (defn pm-record [store ts event-code]
   (metric-write store ts event-code))
@@ -89,9 +153,13 @@
             (swap! state-atom assoc-in [:stats name :status] "ok"))
           (do
             (println (str "[PM] 다운 감지: " name " (재시작 " restarts "/" max-restart ")"))
+            ;; ── EVENT: crashed ──────────────────────────────────────
+            (tl-append! log-dir name "crashed" "watchdog_down_detected" restarts)
             (if (>= restarts max-restart)
               (do
                 (println (str "[PM] 최대 재시작 초과: " name))
+                ;; ── EVENT: max_restarts_exceeded ────────────────────
+                (tl-append! log-dir name "max_restarts_exceeded" "restart_limit_reached" restarts)
                 (when store
                   (let [s2 (pm-record store (now-ms) 2.0)]
                     (swap! state-atom assoc-in [:stores name] s2)))
@@ -99,6 +167,8 @@
               (do
                 (pm-stop name (get proc "cmd") pid-dir)
                 (pm-start proc log-dir pid-dir)
+                ;; ── EVENT: restart_attempt ──────────────────────────
+                (tl-append! log-dir name "restart_attempt" "watchdog_auto_restart" (+ restarts 1))
                 (when store
                   (let [s2 (pm-record store (now-ms) 1.0)]
                     (swap! state-atom assoc-in [:stores name] s2)))
@@ -123,7 +193,6 @@
         pid-dir  (get cfg "pid_dir")
         interval (get cfg "check_interval_ms")]
     (pm-init-dirs cfg)
-    ;; 초기 상태 + metric-store 초기화
     (let [stats  (reduce (fn [acc p]
                            (assoc acc (get p "name") {:restarts 0 :status "starting"}))
                          {} procs)
@@ -133,13 +202,14 @@
                              (assoc acc n (metric-open path nil))))
                          {} procs)]
       (reset! pm-state {:procs procs :stats stats :stores stores :config cfg})
-      ;; 초기 기동
+      ;; 초기 기동 + 시작 이벤트
       (doseq [proc procs]
         (let [name (get proc "name")]
           (when (not (pm-alive? name pid-dir))
             (pm-start proc log-dir pid-dir)
+            (tl-append! log-dir name "started" "pm_initial_start" 0)
             (swap! pm-state assoc-in [:stats name :status] "ok"))))
-      ;; 감시 루프 등록
+      ;; 감시 루프
       (let [ms (if (nil-or-empty? interval) 10000 interval)]
         (fl-set-interval ms "pm-run-check")
         (println (str "[PM] 감시 시작 — " (length procs) "개 프로세스, " ms "ms 간격"))))))
