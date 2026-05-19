@@ -56,6 +56,36 @@
           (swap! pm-state assoc-in [:stats name :status] "ok")
           (server-json {"ok" true "restarted" name}))))))
 
+;; ── POST /api/stop/:name — 수동 중지 ────────────────────────────────
+(server-post "/api/stop/:name"
+  (fn [req]
+    (let [name  (get (get req "params") "name")
+          state @pm-state
+          procs (get state :procs)
+          proc  (find-first (fn [p] (= (get p "name") name)) procs)
+          cfg   (get state :config)]
+      (if (nil? proc)
+        (server-json {"ok" false "error" "프로세스 없음"})
+        (do
+          (pm-stop name (get proc "cmd") (get cfg "pid_dir"))
+          (swap! pm-state assoc-in [:stats name :status] "stopped")
+          (server-json {"ok" true "stopped" name}))))))
+
+;; ── POST /api/start/:name — 수동 시작 ────────────────────────────────
+(server-post "/api/start/:name"
+  (fn [req]
+    (let [name  (get (get req "params") "name")
+          state @pm-state
+          procs (get state :procs)
+          proc  (find-first (fn [p] (= (get p "name") name)) procs)
+          cfg   (get state :config)]
+      (if (nil? proc)
+        (server-json {"ok" false "error" "프로세스 없음"})
+        (do
+          (pm-start proc (get cfg "log_dir") (get cfg "pid_dir"))
+          (swap! pm-state assoc-in [:stats name :status] "ok")
+          (server-json {"ok" true "started" name}))))))
+
 ;; ── GET /api/config — 현재 설정 ──────────────────────────────────────
 (server-get "/api/config"
   (fn [req]

@@ -1,0 +1,24 @@
+{
+  "processes": [
+    {
+      "name": "metric-store",
+      "cmd": "node /root/kim/freelang-v11/bootstrap.js run /root/kim/freelang-metric-store/server.fl",
+      "health_url": "http://localhost:41900/api/health",
+      "max_restarts": 5
+    },
+    {
+      "name": "rpc-server",
+      "cmd": "node /root/kim/freelang-v11/bootstrap.js run /root/kim/freelang-rpc/rpc-server-main.fl",
+      "max_restarts": 5
+    },
+    {
+      "name": "rpc-server-v2",
+      "cmd": "node /root/kim/freelang-v11/bootstrap.js run /root/kim/freelang-rpc/rpc-server-v2-main.fl",
+      "max_restarts": 5
+    }
+  ],
+  "metric_path": "/tmp/flpm-metrics",
+  "log_dir": "/tmp/flpm-logs",
+  "pid_dir": "/tmp/flpm-pids",
+  "check_interval_ms": 10000
+}
