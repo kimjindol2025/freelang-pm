@@ -1,0 +1,2 @@
+(load "/root/kim/freelang-pm/server.fl")
+(start-server "/root/kim/freelang-pm/examples/demo.json")

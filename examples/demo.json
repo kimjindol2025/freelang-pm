@@ -1,0 +1,14 @@
+{
+  "processes": [
+    {
+      "name": "test-proc",
+      "cmd": "node /root/kim/freelang-v11/bootstrap.js run /tmp/test-proc.fl",
+      "check_interval_ms": 5000,
+      "max_restarts": 3
+    }
+  ],
+  "metric_path": "/tmp/flpm-metrics",
+  "log_dir": "/tmp/flpm-logs",
+  "pid_dir": "/tmp/flpm-pids",
+  "check_interval_ms": 5000
+}

@@ -1,0 +1,10 @@
+FREEDOC {
+  version: 2
+  spec: "2026-05"
+}
+
+MAP {
+  entry: pm.fl
+  server: server.fl
+  examples: examples/
+}

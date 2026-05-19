@@ -1,0 +1,145 @@
+(load "/root/kim/freelang-metric-store/metric-store.fl")
+
+;; ── 디렉토리 초기화 ──────────────────────────────────────────────────
+(defn pm-init-dirs [cfg]
+  (file-mkdir (get cfg "metric_path"))
+  (file-mkdir (get cfg "log_dir"))
+  (file-mkdir (get cfg "pid_dir")))
+
+;; ── 설정 로드 ────────────────────────────────────────────────────────
+(defn pm-load [config-path]
+  (let [raw (file-read config-path)]
+    (if (nil-or-empty? raw)
+      (throw (str "pm-load: 설정 파일 없음 — " config-path))
+      (json-parse raw))))
+
+;; ── PID 파일 경로 ────────────────────────────────────────────────────
+(defn pid-file [name pid-dir]
+  (str pid-dir "/" name ".pid"))
+
+;; ── 프로세스 시작 (setsid — 세션 분리) ──────────────────────────────
+(defn pm-start [proc log-dir pid-dir]
+  (let [name    (get proc "name")
+        cmd     (get proc "cmd")
+        logf    (str log-dir "/" name ".log")
+        pidf    (pid-file name pid-dir)
+        full    (str "setsid sh -c '" cmd " >> " logf " 2>&1 & echo $!'")
+        result  (shell-exec-result full)
+        pid     (str-trim (get result "stdout"))]
+    (if (and (get result "ok") (not (str-blank? pid)))
+      (do (file-write pidf pid)
+          (println (str "[PM] 시작: " name " PID=" pid))
+          pid)
+      (do (println (str "[PM] 시작 실패: " name " — " (get result "stderr")))
+          nil))))
+
+;; ── 프로세스 생존 확인 (kill -0) ─────────────────────────────────────
+(defn pm-alive? [name pid-dir]
+  (let [pidf (pid-file name pid-dir)]
+    (if (not (file-exists pidf))
+      false
+      (let [pid    (str-trim (file-read pidf))
+            result (shell-exec-result (str "kill -0 " pid " 2>/dev/null"))]
+        (get result "ok")))))
+
+;; ── 프로세스 중지 (2단계: PID + cmdline) ────────────────────────────
+(defn pm-stop [name cmd pid-dir]
+  (let [pidf (pid-file name pid-dir)]
+    (when (file-exists pidf)
+      (let [pid (str-trim (file-read pidf))]
+        (shell-exec-result (str "kill " pid " 2>/dev/null"))
+        (sleep 500)
+        (shell-exec-result (str "kill -9 " pid " 2>/dev/null"))))
+    (shell-exec-result (str "pkill -f '" cmd "' 2>/dev/null"))
+    (when (file-exists pidf) (file-delete pidf))))
+
+;; ── 헬스체크 ─────────────────────────────────────────────────────────
+(defn pm-health [proc pid-dir]
+  (let [name       (get proc "name")
+        health-url (get proc "health_url")]
+    (if (nil-or-empty? health-url)
+      (pm-alive? name pid-dir)
+      (let [result (shell-exec-result (str "wget -q -O /dev/null --timeout=2 '" health-url "' 2>/dev/null"))]
+        (get result "ok")))))
+
+;; ── 메트릭 기록 ──────────────────────────────────────────────────────
+;; event-code: 0.0=정상 1.0=재시작 2.0=최대재시작초과
+(defn pm-record [store ts event-code]
+  (metric-write store ts event-code))
+
+;; ── 단일 프로세스 감시 ───────────────────────────────────────────────
+(defn pm-check-one [proc state-atom]
+  (let [name        (get proc "name")
+        max-restart (get proc "max_restarts")
+        state       @state-atom
+        stats       (get (get state :stats) name)
+        restarts    (get stats :restarts)
+        status      (get stats :status)
+        cfg         (get state :config)
+        pid-dir     (get cfg "pid_dir")
+        log-dir     (get cfg "log_dir")
+        store       (get (get state :stores) name)]
+    (when (not (= status "max"))
+      (let [alive (pm-health proc pid-dir)]
+        (if alive
+          (do
+            (when store
+              (let [s2 (pm-record store (now-ms) 0.0)]
+                (swap! state-atom assoc-in [:stores name] s2)))
+            (swap! state-atom assoc-in [:stats name :status] "ok"))
+          (do
+            (println (str "[PM] 다운 감지: " name " (재시작 " restarts "/" max-restart ")"))
+            (if (>= restarts max-restart)
+              (do
+                (println (str "[PM] 최대 재시작 초과: " name))
+                (when store
+                  (let [s2 (pm-record store (now-ms) 2.0)]
+                    (swap! state-atom assoc-in [:stores name] s2)))
+                (swap! state-atom assoc-in [:stats name :status] "max"))
+              (do
+                (pm-stop name (get proc "cmd") pid-dir)
+                (pm-start proc log-dir pid-dir)
+                (when store
+                  (let [s2 (pm-record store (now-ms) 1.0)]
+                    (swap! state-atom assoc-in [:stores name] s2)))
+                (swap! state-atom assoc-in [:stats name]
+                       {:restarts (+ restarts 1) :status "restarting"})))))))))
+
+;; ── 전체 감시 루프 ───────────────────────────────────────────────────
+(define pm-state (atom {:procs [] :stats {} :stores {} :config {}}))
+
+(defn pm-run-check []
+  (let [state @pm-state
+        procs (get state :procs)]
+    (doseq [proc procs]
+      (pm-check-one proc pm-state))))
+
+;; ── PM 시작 진입점 ───────────────────────────────────────────────────
+(defn pm-start-all [config-path]
+  (let [cfg      (pm-load config-path)
+        procs    (get cfg "processes")
+        mpath    (get cfg "metric_path")
+        log-dir  (get cfg "log_dir")
+        pid-dir  (get cfg "pid_dir")
+        interval (get cfg "check_interval_ms")]
+    (pm-init-dirs cfg)
+    ;; 초기 상태 + metric-store 초기화
+    (let [stats  (reduce (fn [acc p]
+                           (assoc acc (get p "name") {:restarts 0 :status "starting"}))
+                         {} procs)
+          stores (reduce (fn [acc p]
+                           (let [n    (get p "name")
+                                 path (str mpath "/" n ".bin")]
+                             (assoc acc n (metric-open path nil))))
+                         {} procs)]
+      (reset! pm-state {:procs procs :stats stats :stores stores :config cfg})
+      ;; 초기 기동
+      (doseq [proc procs]
+        (let [name (get proc "name")]
+          (when (not (pm-alive? name pid-dir))
+            (pm-start proc log-dir pid-dir)
+            (swap! pm-state assoc-in [:stats name :status] "ok"))))
+      ;; 감시 루프 등록
+      (let [ms (if (nil-or-empty? interval) 10000 interval)]
+        (fl-set-interval ms "pm-run-check")
+        (println (str "[PM] 감시 시작 — " (length procs) "개 프로세스, " ms "ms 간격"))))))
