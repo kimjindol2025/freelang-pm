@@ -256,7 +256,8 @@
                                  path (str mpath "/" n ".bin")]
                              (assoc acc n (metric-open path nil))))
                          {} procs)]
-      (reset! pm-state {:procs procs :stats stats :stores stores :config cfg})
+      (reset! pm-state {:procs procs :stats stats :stores stores
+                        :config (assoc cfg "config_path" config-path)})
       ;; 초기 기동 + 시작 이벤트
       (doseq [proc procs]
         (let [name (get proc "name")]

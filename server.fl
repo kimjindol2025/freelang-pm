@@ -364,6 +364,68 @@
           tiers (get cfg "tiers")]
       (server-json {"ok" true "tiers" tiers}))))
 
+;; ── POST /api/tier/:name — Tier 변경 ─────────────────────────────────
+(server-post "/api/tier/:name"
+  (fn [req]
+    (let [name     (get (get req "params") "name")
+          body     (get req "body")
+          new-tier (str-to-num (str (get body "tier")))
+          cfg-path (get (get @pm-state :config) "config_path")]
+      (if (or (nil? new-tier) (< new-tier 0) (> new-tier 3))
+        (server-json {"ok" false "error" "tier는 0~3 사이 정수"} 400)
+        (let [state  @pm-state
+              procs  (get state :procs)
+              target (first (filter (fn [p] (= (get p "name") name)) procs))]
+          (if (nil? target)
+            (server-json {"ok" false "error" (str name " 서비스 없음")} 404)
+            (let [old-tier (or (get target "tier") 2)
+                  ;; 메모리 상태 업데이트
+                  new-procs (map (fn [p]
+                                   (if (= (get p "name") name)
+                                     (assoc p "tier" new-tier)
+                                     p))
+                                 procs)]
+              (swap! pm-state assoc :procs new-procs)
+              ;; services.json 영속화
+              (when (not (nil? cfg-path))
+                (try
+                  (let [raw (file-read cfg-path)
+                        cfg-data (json-parse raw)
+                        cfg-procs (get cfg-data "processes")
+                        updated-procs (map (fn [p]
+                                            (if (= (get p "name") name)
+                                              (assoc p "tier" new-tier)
+                                              p))
+                                          cfg-procs)
+                        new-cfg (assoc cfg-data "processes" updated-procs)]
+                    (file-write cfg-path (json-stringify new-cfg)))
+                  (catch $e
+                    (println (str "[PM] tier 저장 실패: " $e)))))
+              (tl-append! (get (get @pm-state :config) "log_dir")
+                          name "tier_changed"
+                          (str "T" old-tier "→T" new-tier) 0)
+              (server-json {"ok"       true
+                            "name"     name
+                            "old_tier" old-tier
+                            "new_tier" new-tier}))))))))
+
+;; ── GET /api/tier/:name — 특정 서비스 Tier 조회 ─────────────────────
+(server-get "/api/tier/:name"
+  (fn [req]
+    (let [name  (get (get req "params") "name")
+          state @pm-state
+          procs (get state :procs)
+          proc  (first (filter (fn [p] (= (get p "name") name)) procs))]
+      (if (nil? proc)
+        (server-json {"ok" false "error" (str name " 없음")} 404)
+        (let [tier     (or (get proc "tier") 2)
+              cfg      (get state :config)
+              tier-def (tier-get-def cfg tier)]
+          (server-json {"ok" true "name" name "tier" tier
+                        "tier_name" (get tier-def "name")
+                        "allow" (get tier-def "allow")
+                        "deny"  (get tier-def "deny")}))))))
+
 ;; ── GET /api/timeline — 전체 이벤트 타임라인 ────────────────────────
 (server-get "/api/timeline"
   (fn [req]
