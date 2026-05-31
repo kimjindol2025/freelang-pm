@@ -1,4 +1,47 @@
-(load "/root/kim/freelang-metric-store/metric-store.fl")
+(load "/home/kimjin/kim/Desktop/kim/01_Active_Projects/freelang-metric-store/metric-store.fl")
+
+;; ══════════════════════════════════════════════════════════════════
+;; TIER 권한 시스템
+;; ── Tier 0: LOCKED   — 조작 완전 차단
+;; ── Tier 1: PROTECTED — restart 허가 필요
+;; ── Tier 2: NORMAL   — restart/stop 허용, delete 허가
+;; ── Tier 3: DEV      — 전체 허용
+;; ══════════════════════════════════════════════════════════════════
+
+(defn tier-get-def [cfg tier-num]
+  (get (get cfg "tiers") (str tier-num)))
+
+(defn tier-of [proc cfg]
+  (let [[$t (get proc "tier")]]
+    (if (nil? $t) 2 $t)))
+
+(defn tier-check [action proc cfg confirm-token]
+  "권한 체크 결과 반환:
+   {:ok true}                     — 허용
+   {:ok false :need_confirm true} — 허가 필요
+   {:ok false :denied true}       — 완전 차단"
+  (let [[$tier  (tier-of proc cfg)]
+        [$tdef  (tier-get-def cfg $tier)]
+        [$allow (or (get $tdef "allow") [])]
+        [$conf  (or (get $tdef "confirm") [])]
+        [$deny  (or (get $tdef "deny") [])]]
+    (cond
+      (some (fn [$d] (= $d action)) $deny)
+        {:ok false :denied true
+         :reason (str "[Tier " $tier " " (get $tdef "name") "] " action " 금지")}
+      (some (fn [$c] (= $c action)) $conf)
+        (let [[$expected (get cfg "confirm_token")]
+              [$ok       (and (not (nil-or-empty? confirm-token))
+                              (= confirm-token $expected))]]
+          (if $ok
+            {:ok true :confirmed true}
+            {:ok false :need_confirm true
+             :reason (str "[Tier " $tier " " (get $tdef "name") "] " action " — 허가 토큰 필요")}))
+      (some (fn [$a] (= $a action)) $allow)
+        {:ok true}
+      :else
+        {:ok false :denied true
+         :reason (str "[Tier " $tier "] " action " — 미정의 액션")})))
 
 ;; ── 디렉토리 초기화 ──────────────────────────────────────────────────
 (defn pm-init-dirs [cfg]
@@ -67,10 +110,10 @@
     (map (fn [e]
            (let [ts      (get e "ts")
                  sec     (floor (/ ts 1000))
-                 ms-part (mod ts 1000)
-                 hh      (str-pad-left (str (mod (floor (/ sec 3600)) 24)) 2 "0")
-                 mm      (str-pad-left (str (mod (floor (/ sec 60)) 60)) 2 "0")
-                 ss      (str-pad-left (str (mod sec 60)) 2 "0")
+                 ms-part (% ts 1000)
+                 hh      (str-pad-left (str (% (floor (/ sec 3600)) 24)) 2 "0")
+                 mm      (str-pad-left (str (% (floor (/ sec 60)) 60)) 2 "0")
+                 ss      (str-pad-left (str (% sec 60)) 2 "0")
                  svc     (get e "service")
                  evt     (get e "event")
                  reason  (or (get e "reason") "")
@@ -132,9 +175,11 @@
   (metric-write store ts event-code))
 
 ;; ── 단일 프로세스 감시 ───────────────────────────────────────────────
+;; watch_only=true → 헬스체크만, 재시작 없음 (PM2가 관리하는 DB 등)
 (defn pm-check-one [proc state-atom]
   (let [name        (get proc "name")
-        max-restart (get proc "max_restarts")
+        watch-only  (or (get proc "watch_only") false)
+        max-restart (or (get proc "max_restarts") 0)
         state       @state-atom
         stats       (get (get state :stats) name)
         restarts    (get stats :restarts)
@@ -143,15 +188,25 @@
         pid-dir     (get cfg "pid_dir")
         log-dir     (get cfg "log_dir")
         store       (get (get state :stores) name)]
-    (when (not (= status "max"))
-      (let [alive (pm-health proc pid-dir)]
-        (if alive
-          (do
-            (when store
-              (let [s2 (pm-record store (now-ms) 0.0)]
-                (swap! state-atom assoc-in [:stores name] s2)))
-            (swap! state-atom assoc-in [:stats name :status] "ok"))
-          (do
+    (let [alive (pm-health proc pid-dir)]
+      (if alive
+        ;; ── 살아있음: max/restarting 상태도 ok로 복구
+        (do
+          (when store
+            (let [s2 (pm-record store (now-ms) 0.0)]
+              (swap! state-atom assoc-in [:stores name] s2)))
+          (when (not (= status "ok"))
+            (tl-append! log-dir name "recovered" "health_check_pass" restarts))
+          (swap! state-atom assoc-in [:stats name :status] "ok"))
+        ;; ── 다운됨
+        (do
+          ;; watch_only: 재시작 없이 상태만 기록
+          (when watch-only
+            (tl-append! log-dir name "down_detected" "watch_only_no_restart" restarts)
+            (swap! state-atom assoc-in [:stats name :status] "down"))
+          (when (not watch-only)
+          ;; max 상태에서는 재시작 시도 안 함 (상태만 유지)
+          (when (not (= status "max"))
             (println (str "[PM] 다운 감지: " name " (재시작 " restarts "/" max-restart ")"))
             ;; ── EVENT: crashed ──────────────────────────────────────
             (tl-append! log-dir name "crashed" "watchdog_down_detected" restarts)
@@ -173,7 +228,7 @@
                   (let [s2 (pm-record store (now-ms) 1.0)]
                     (swap! state-atom assoc-in [:stores name] s2)))
                 (swap! state-atom assoc-in [:stats name]
-                       {:restarts (+ restarts 1) :status "restarting"})))))))))
+                       {:restarts (+ restarts 1) :status "restarting"}))))))))))
 
 ;; ── 전체 감시 루프 ───────────────────────────────────────────────────
 (define pm-state (atom {:procs [] :stats {} :stores {} :config {}}))
@@ -210,6 +265,7 @@
             (tl-append! log-dir name "started" "pm_initial_start" 0)
             (swap! pm-state assoc-in [:stats name :status] "ok"))))
       ;; 감시 루프
-      (let [ms (if (nil-or-empty? interval) 10000 interval)]
+      ;; 기본 30초 (서비스 52개 × HTTP → 10초는 너무 짧음)
+      (let [ms (if (nil-or-empty? interval) 30000 interval)]
         (fl-set-interval ms "pm-run-check")
         (println (str "[PM] 감시 시작 — " (length procs) "개 프로세스, " ms "ms 간격"))))))
