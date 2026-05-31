@@ -75,24 +75,6 @@
       "note": "PM2 관리 — freelang-pm은 감시만"
     },
     {
-      "name": "pika-db",
-      "health_url": "http://localhost:40004/health",
-      "tier": 0,
-      "check_interval_ms": 30000,
-      "max_restarts": 0,
-      "watch_only": true,
-      "note": "PM2 관리 — freelang-pm은 감시만"
-    },
-    {
-      "name": "freelang-mariadb-sql",
-      "health_url": "http://localhost:40006/health",
-      "tier": 0,
-      "check_interval_ms": 30000,
-      "max_restarts": 0,
-      "watch_only": true,
-      "note": "PM2 관리 — freelang-pm은 감시만"
-    },
-    {
       "name": "dclub-tasks",
       "cmd": "node /home/kimjin/freelang-v11/bootstrap.js run /home/kimjin/kim/Desktop/kim/01_Active_Projects/dclub-tasks/app/main.fl",
       "health_url": "http://localhost:30367/health",
@@ -150,15 +132,6 @@
       "name": "akl-analytics",
       "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-analytics/bootstrap-wrapper.js",
       "health_url": "http://localhost:39005/health",
-      "tier": 2,
-      "check_interval_ms": 30000,
-      "max_restarts": 0,
-      "pm2_managed": true
-    },
-    {
-      "name": "akl-analytics-new",
-      "cmd": "node /home/kimjin/freelang-v11/bootstrap.js run /home/kimjin/kim/Desktop/kim/akl/akl-analytics-new/app/server.fl",
-      "health_url": "http://localhost:40318/health",
       "tier": 2,
       "check_interval_ms": 30000,
       "max_restarts": 0,
@@ -258,15 +231,6 @@
       "name": "akl-crm",
       "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-crm/bootstrap-wrapper.js",
       "health_url": "http://localhost:39010/health",
-      "tier": 2,
-      "check_interval_ms": 30000,
-      "max_restarts": 0,
-      "pm2_managed": true
-    },
-    {
-      "name": "akl-crm-svc",
-      "cmd": "node /home/kimjin/freelang-v11/bootstrap.js run /home/kimjin/kim/Desktop/kim/akl/akl-crm-svc/app/server.fl",
-      "health_url": "http://localhost:39011/health",
       "tier": 2,
       "check_interval_ms": 30000,
       "max_restarts": 0,
@@ -478,7 +442,7 @@
       "check_interval_ms": 30000,
       "max_restarts": 0,
       "watch_only": true,
-      "note": "PM2 관리 — freelang-pm은 감시만"
+      "note": "Node.js 미구현 (port 3000, status=todo) — 비활성"
     },
     {
       "name": "akl-subscription",

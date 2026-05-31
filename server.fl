@@ -1,4 +1,4 @@
-(load "/root/kim/freelang-pm/pm.fl")
+(load "/home/kimjin/kim/Desktop/kim/01_Active_Projects/freelang-pm/pm.fl")
 
 (define PORT 41902)
 
@@ -15,10 +15,18 @@
           result (map (fn [p]
                         (let [name (get p "name")
                               st   (get stats name)]
-                          {"name"     name
-                           "status"   (get st :status)
-                           "restarts" (get st :restarts)
-                           "cmd"      (get p "cmd")}))
+                          (let [tier-num  (or (get p "tier") 2)
+                              tier-def  (tier-get-def (get state :config) tier-num)]
+                          {"name"      name
+                           "status"    (get st :status)
+                           "restarts"  (get st :restarts)
+                           "cmd"       (get p "cmd")
+                           "tier"      tier-num
+                           "tier_name" (get tier-def "name")
+                           "tier_color" (get tier-def "color")
+                           "allow"     (get tier-def "allow")
+                           "confirm"   (get tier-def "confirm")
+                           "deny"      (get tier-def "deny")})))
                       procs)]
       (server-json {"ok" true "processes" result}))))
 
@@ -40,55 +48,321 @@
                         "restarts" (get st :restarts)
                         "metrics"  metrics}))))))
 
+;; ── 공통 tier 체크 헬퍼 ─────────────────────────────────────────────
+(defn with-tier-check [req action handler]
+  (let [name    (get (get req "params") "name")
+        state   @pm-state
+        procs   (get state :procs)
+        proc    (find-first (fn [p] (= (get p "name") name)) procs)
+        cfg     (get state :config)
+        confirm (or (get (get req "body") "confirm_token")
+                    (get (get req "query") "confirm_token")
+                    "")]
+    (if (nil? proc)
+      (server-json {"ok" false "error" "프로세스 없음"} 404)
+      (let [result (tier-check action proc cfg confirm)]
+        (if (get result "ok")
+          (handler proc cfg)
+          (if (get result "need_confirm")
+            (server-json {"ok" false
+                          "need_confirm" true
+                          "reason" (get result "reason")
+                          "hint" "Body에 confirm_token 포함 필요"} 403)
+            (server-json {"ok" false
+                          "denied" true
+                          "reason" (get result "reason")} 403)))))))
+
 ;; ── POST /api/restart/:name — 수동 재시작 ────────────────────────────
+;; PM2 관리 여부 판별: watch_only 또는 pm2_managed 플래그
+(defn pm2-managed? [proc]
+  (or (get proc "watch_only")
+      (get proc "pm2_managed")))
+
+;; ── 포트 추출: "http://localhost:30200/health" → "30200" ─────────────
+(defn extract-port [health-url]
+  (when (not (nil-or-empty? health-url))
+    (let [parts (str-split health-url ":")]
+      (when (>= (length parts) 3)
+        (first (str-split (get parts 2) "/"))))))
+
+;; ── 포트 좀비 kill: 재시작 전 포트 선점 프로세스 제거 ─────────────
+(defn kill-zombie-on-port [name port]
+  "포트를 점유 중인 PM2 외 좀비 프로세스를 kill.
+   반환: {:killed true :pid N} 또는 {:killed false}"
+  (when (not (nil-or-empty? port))
+    (let [;; 포트 점유 PID
+          port-pid  (str-trim (or (shell-exec
+                       (str "ss -tlnp 2>/dev/null | grep ':" port " ' "
+                            "| grep -oP 'pid=\\K[0-9]+' | head -1")) ""))
+          ;; PM2가 알고 있는 현재 PID
+          pm2-pid   (str-trim (or (shell-exec
+                       (str "/home/kimjin/.npm-global/bin/pm2 pid " name
+                            " 2>/dev/null | tail -1")) ""))]
+      (if (nil-or-empty? port-pid)
+        {:killed false :reason "포트 비어있음"}
+        (if (= port-pid pm2-pid)
+          {:killed false :reason "정상 PM2 프로세스"}
+          ;; 좀비: PM2가 모르는 PID가 포트 점유 → kill
+          (do
+            (println (str "🔫 [ZOMBIE KILL] " name " 포트 " port
+                          " 좀비 PID " port-pid " (PM2 PID=" pm2-pid ")"))
+            (shell-exec (str "kill -9 " port-pid " 2>/dev/null"))
+            (shell-exec "sleep 0.3")
+            {:killed true :pid port-pid :pm2-pid pm2-pid}))))))
+
+;; ── PM2 스마트 재시작 (포트 좀비 kill → reload) ────────────────────
+(defn do-pm2-reload [name log-dir event-label]
+  (let [;; 해당 서비스의 health_url에서 포트 추출
+        state    @pm-state
+        proc     (first (filter (fn [p] (= (get p "name") name))
+                                (get state :procs)))
+        port     (extract-port (get proc "health_url"))
+        ;; 좀비 정리
+        kill-res (kill-zombie-on-port name port)
+        ;; PM2 reload
+        res      (shell-exec (str "/home/kimjin/.npm-global/bin/pm2 reload " name " 2>&1"))]
+    (tl-append! log-dir name "started" event-label 0)
+    (when (get kill-res :killed)
+      (tl-append! log-dir name "zombie_killed" (str "port=" port) 0))
+    {"ok"         true
+     "restarted"  name
+     "via"        "pm2-reload"
+     "port"       port
+     "zombie_killed" (get kill-res :killed false)
+     "zombie_pid"    (get kill-res :pid)}))
+
 (server-post "/api/restart/:name"
   (fn [req]
-    (let [name  (get (get req "params") "name")
-          state @pm-state
-          procs (get state :procs)
-          proc  (find-first (fn [p] (= (get p "name") name)) procs)
-          cfg   (get state :config)]
-      (if (nil? proc)
-        (server-json {"ok" false "error" "프로세스 없음"})
-        (do
-          (pm-stop name (get proc "cmd") (get cfg "pid_dir"))
-          (tl-append! (get cfg "log_dir") name "stopped" "manual_stop" 0)
-          (pm-start proc (get cfg "log_dir") (get cfg "pid_dir"))
-          (tl-append! (get cfg "log_dir") name "started" "manual_restart" 0)
-          (swap! pm-state assoc-in [:stats name :status] "ok")
-          (server-json {"ok" true "restarted" name}))))))
+    (with-tier-check req "restart"
+      (fn [proc cfg]
+        (let [name    (get proc "name")
+              log-dir (get cfg "log_dir")]
+          (if (pm2-managed? proc)
+            (server-json (do-pm2-reload name log-dir "manual_restart") 200)
+            (do
+              (pm-stop name (get proc "cmd") (get cfg "pid_dir"))
+              (tl-append! log-dir name "stopped" "manual_stop" 0)
+              (pm-start proc log-dir (get cfg "pid_dir"))
+              (tl-append! log-dir name "started" "manual_restart" 0)
+              (swap! pm-state assoc-in [:stats name :status] "ok")
+              (server-json {"ok" true "restarted" name "via" "direct"}))))))))
 
-;; ── POST /api/stop/:name — 수동 중지 ────────────────────────────────
 (server-post "/api/stop/:name"
   (fn [req]
-    (let [name  (get (get req "params") "name")
-          state @pm-state
-          procs (get state :procs)
-          proc  (find-first (fn [p] (= (get p "name") name)) procs)
-          cfg   (get state :config)]
-      (if (nil? proc)
-        (server-json {"ok" false "error" "프로세스 없음"})
-        (do
-          (pm-stop name (get proc "cmd") (get cfg "pid_dir"))
-          (tl-append! (get cfg "log_dir") name "stopped" "manual_stop" 0)
-          (swap! pm-state assoc-in [:stats name :status] "stopped")
-          (server-json {"ok" true "stopped" name}))))))
+    (with-tier-check req "stop"
+      (fn [proc cfg]
+        (let [name    (get proc "name")
+              log-dir (get cfg "log_dir")]
+          (if (pm2-managed? proc)
+            (do
+              (shell-exec (str "/home/kimjin/.npm-global/bin/pm2 stop " name " 2>&1"))
+              (tl-append! log-dir name "stopped" "manual_stop_pm2" 0)
+              (swap! pm-state assoc-in [:stats name :status] "stopped")
+              (server-json {"ok" true "stopped" name "via" "pm2"} 200))
+            (do
+              (pm-stop name (get proc "cmd") (get cfg "pid_dir"))
+              (tl-append! log-dir name "stopped" "manual_stop" 0)
+              (swap! pm-state assoc-in [:stats name :status] "stopped")
+              (server-json {"ok" true "stopped" name "via" "direct"}))))))))
 
-;; ── POST /api/start/:name — 수동 시작 ────────────────────────────────
 (server-post "/api/start/:name"
+  (fn [req]
+    (with-tier-check req "start"
+      (fn [proc cfg]
+        (let [name    (get proc "name")
+              log-dir (get cfg "log_dir")]
+          (if (pm2-managed? proc)
+            (do
+              (shell-exec (str "/home/kimjin/.npm-global/bin/pm2 start " name " 2>&1"))
+              (tl-append! log-dir name "started" "manual_start_pm2" 0)
+              (swap! pm-state assoc-in [:stats name :status] "ok")
+              (server-json {"ok" true "started" name "via" "pm2"} 200))
+            (do
+              (pm-start proc log-dir (get cfg "pid_dir"))
+              (tl-append! log-dir name "started" "manual_start" 0)
+              (swap! pm-state assoc-in [:stats name :status] "ok")
+              (server-json {"ok" true "started" name "via" "direct"}))))))))
+
+;; ══════════════════════════════════════════════════════════════════
+;; 운영/분석/장애 API
+;; ══════════════════════════════════════════════════════════════════
+
+;; ── GET /api/summary — 전체 요약 통계 ─────────────────────────────
+(server-get "/api/summary"
+  (fn [req]
+    (let [state  @pm-state
+          procs  (get state :procs)
+          stats  (get state :stats)
+          cfg    (get state :config)]
+      (let [total   (length procs)
+            ok-lst  (filter (fn [p] (= (get (get stats (get p "name")) :status) "ok")) procs)
+            err-lst (filter (fn [p] (not (= (get (get stats (get p "name")) :status) "ok"))) procs)
+            by-tier (reduce
+                      (fn [acc p]
+                        (let [t   (str (or (get p "tier") 2))
+                              st  (get (get stats (get p "name")) :status)]
+                          (assoc acc t
+                            (assoc (or (get acc t) {"ok" 0 "err" 0})
+                              (if (= st "ok") "ok" "err")
+                              (+ (or (get (or (get acc t) {"ok" 0 "err" 0}) (if (= st "ok") "ok" "err")) 0) 1)))))
+                      {}
+                      procs)]
+        (server-json
+          {"ok"      true
+           "total"   total
+           "healthy" (length ok-lst)
+           "errors"  (length err-lst)
+           "by_tier" by-tier
+           "error_list" (map (fn [p]
+                               (let [name (get p "name")
+                                     st   (get (get stats name) :status)]
+                                 {"name"       name
+                                  "status"     st
+                                  "tier"       (or (get p "tier") 2)
+                                  "watch_only" (or (get p "watch_only") false)
+                                  "health_url" (get p "health_url")}))
+                             err-lst)} 200)))))
+
+;; ── GET /api/errors — 이상 서비스만 ────────────────────────────────
+(server-get "/api/errors"
+  (fn [req]
+    (let [state  @pm-state
+          procs  (get state :procs)
+          stats  (get state :stats)]
+      (let [err-lst (filter (fn [p]
+                              (not (= (get (get stats (get p "name")) :status) "ok")))
+                            procs)]
+        (server-json
+          {"ok"     true
+           "count"  (length err-lst)
+           "errors" (map (fn [p]
+                           (let [name (get p "name")]
+                             {"name"       name
+                              "status"     (get (get stats name) :status)
+                              "restarts"   (get (get stats name) :restarts)
+                              "tier"       (or (get p "tier") 2)
+                              "watch_only" (or (get p "watch_only") false)
+                              "health_url" (get p "health_url")
+                              "cmd"        (get p "cmd")}))
+                         err-lst)} 200)))))
+
+;; ── GET /api/watchdog-status — 감시 스레드 상태 ────────────────────
+(server-get "/api/watchdog-status"
+  (fn [req]
+    (let [state  @pm-state
+          procs  (get state :procs)
+          stats  (get state :stats)
+          cfg    (get state :config)]
+      (let [watch-only (filter (fn [p] (get p "watch_only")) procs)
+            managed    (filter (fn [p] (not (get p "watch_only"))) procs)]
+        (server-json
+          {"ok"           true
+           "interval_ms"  (get cfg "check_interval_ms")
+           "total"        (length procs)
+           "managed"      (length managed)
+           "watch_only"   (length watch-only)
+           "watch_only_names" (map (fn [p] (get p "name")) watch-only)} 200)))))
+
+;; ── POST /api/probe/:name — 즉시 헬스체크 ──────────────────────────
+(server-post "/api/probe/:name"
+  (fn [req]
+    (let [name   (get (get req "params") "name")
+          state  @pm-state
+          procs  (get state :procs)
+          proc   (find-first (fn [p] (= (get p "name") name)) procs)
+          cfg    (get state :config)]
+      (if (nil? proc)
+        (server-json {"ok" false "error" "프로세스 없음"} 404)
+        (let [url    (get proc "health_url")
+              alive  (pm-health proc (get cfg "pid_dir"))
+              result (if (nil-or-empty? url)
+                       (shell-exec-result (str "curl -s --max-time 2 http://localhost"))
+                       (shell-exec-result (str "curl -s --max-time 2 -o /dev/null -w '%{http_code}' '" url "'")))]
+          (server-json
+            {"ok"         true
+             "name"       name
+             "alive"      alive
+             "health_url" url
+             "tier"       (or (get proc "tier") 2)
+             "watch_only" (or (get proc "watch_only") false)} 200))))))
+
+;; ── POST /api/auto-analyze/:name — PM2 로그 → FAE 자동 분석 ────────
+(server-post "/api/auto-analyze/:name"
   (fn [req]
     (let [name  (get (get req "params") "name")
           state @pm-state
           procs (get state :procs)
           proc  (find-first (fn [p] (= (get p "name") name)) procs)
-          cfg   (get state :config)]
+          stats (get state :stats)]
       (if (nil? proc)
-        (server-json {"ok" false "error" "프로세스 없음"})
-        (do
-          (pm-start proc (get cfg "log_dir") (get cfg "pid_dir"))
-          (tl-append! (get cfg "log_dir") name "started" "manual_start" 0)
-          (swap! pm-state assoc-in [:stats name :status] "ok")
-          (server-json {"ok" true "started" name}))))))
+        (server-json {"ok" false "error" "프로세스 없음"} 404)
+        (let [;; PM2 로그 수집
+              log-cmd (str "/home/kimjin/.npm-global/bin/pm2 logs " name " --lines 50 --nostream 2>&1")
+              log-raw (or (shell-exec log-cmd) "")
+              ;; 타임라인에서 최근 이벤트 추출
+              log-dir (get (get state :config) "log_dir")
+              events  (tl-last log-dir 10)
+              event-str (str-join "\n" (map (fn [e]
+                                              (str (get e "ts") " [" (get e "service") "] "
+                                                   (get e "event") " " (get e "reason")))
+                                           events))
+              ;; FAE 호출
+              fae-body (json-stringify
+                         {"log"   (str log-raw "\n\n--- TIMELINE ---\n" event-str)
+                          "diff"  ""
+                          "trace" ""})
+              fae-res (try
+                        (shell-exec (str "curl -s -X POST http://localhost:30400/run-analysis "
+                                        "-H 'Content-Type: application/json' "
+                                        "-d '" fae-body "'"))
+                        (catch $e nil))]
+          (server-json
+            {"ok"       true
+             "name"     name
+             "status"   (get (get stats name) :status)
+             "log_lines" (length (str-split log-raw "\n"))
+             "fae_result" (try (json-parse fae-res) (catch $e {"raw" fae-res}))} 200))))))
+
+;; ── POST /api/batch-restart — Tier2 이상 서비스 일괄 재시작 ─────────
+(server-post "/api/batch-restart"
+  (fn [req]
+    (let [state  @pm-state
+          procs  (get state :procs)
+          stats  (get state :stats)
+          cfg    (get state :config)]
+      (let [candidates (filter
+                         (fn [p]
+                           (let [st  (get (get stats (get p "name")) :status)
+                                 t   (or (get p "tier") 2)
+                                 wo  (or (get p "watch_only") false)]
+                             (and (not wo)            ;; watch_only 제외
+                                  (= t 2)             ;; Tier2만
+                                  (not (= st "ok"))))) ;; 이상만
+                         procs)
+            results (map
+                      (fn [p]
+                        (let [name (get p "name")
+                              res  (tier-check "restart" p cfg "")]
+                          (if (get res "ok")
+                            (do
+                              (pm-stop name (get p "cmd") (get cfg "pid_dir"))
+                              (pm-start p (get cfg "log_dir") (get cfg "pid_dir"))
+                              (tl-append! (get cfg "log_dir") name "started" "batch_restart" 0)
+                              (swap! pm-state assoc-in [:stats name :status] "restarting")
+                              {"name" name "action" "restarted"})
+                            {"name" name "action" "skipped" "reason" (get res "reason")})))
+                      candidates)]
+        (server-json
+          {"ok"      true
+           "total"   (length candidates)
+           "results" results} 200)))))
+
+;; ── GET /api/tiers — 계층 정의 조회 ─────────────────────────────────
+(server-get "/api/tiers"
+  (fn [req]
+    (let [cfg   (get @pm-state :config)
+          tiers (get cfg "tiers")]
+      (server-json {"ok" true "tiers" tiers}))))
 
 ;; ── GET /api/timeline — 전체 이벤트 타임라인 ────────────────────────
 (server-get "/api/timeline"
@@ -111,7 +385,7 @@
           n       (or (str-to-num (qparam req "n")) 20)
           events  (tl-last log-dir n)]
       (server-html (str "<pre style='font-family:monospace'>"
-                        (html-escape (tl-render events))
+                        (tl-render events)
                         "</pre>")))))
 
 ;; ── GET /api/config — 현재 설정 ──────────────────────────────────────
@@ -124,3 +398,5 @@
   (pm-start-all config-path)
   (println (str "[PM] HTTP API: http://localhost:" PORT))
   (server-start PORT))
+
+(start-server "/home/kimjin/kim/Desktop/kim/01_Active_Projects/freelang-pm/examples/services.json")

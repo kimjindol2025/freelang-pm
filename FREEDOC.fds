@@ -3,8 +3,28 @@ FREEDOC {
   spec: "2026-05"
 }
 
-MAP {
-  entry: pm.fl
-  server: server.fl
-  examples: examples/
+POSITION {
+  status: done
+  current: "FreeLang PM v1.0 완성 — Tier 시스템 + 자동복구 v2 + 60초 루프"
+}
+
+FIXED {
+  port: 41902
+  stack: freelang_v11
+  entry: server.fl
+  services: 52
+}
+
+FAILURE {
+  cause: "shell() 반환값이 string인데 map 키 접근 → success 항상 false"
+  fix: "shell-exec()로 교체 + 출력 문자열로 성공 판별"
+}
+
+FAILURE {
+  cause: "PM2 관리 서비스를 freelang-pm이 직접 fork → 포트 충돌"
+  fix: "pm2_managed 플래그 + pm2 reload 위임"
+}
+
+NEXT {
+  task: "스마트 재시작 — 포트 점유 좀비 프로세스 kill 후 재시작"
 }
