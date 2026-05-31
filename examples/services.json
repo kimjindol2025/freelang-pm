@@ -234,7 +234,9 @@
       "tier": 2,
       "check_interval_ms": 30000,
       "max_restarts": 0,
-      "pm2_managed": true
+      "pm2_managed": true,
+      "watch_only": true,
+      "note": "PM2 관리 (akl-crm) — freelang-pm은 감시만"
     },
     {
       "name": "akl-edu",
