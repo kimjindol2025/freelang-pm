@@ -205,8 +205,9 @@
             (tl-append! log-dir name "down_detected" "watch_only_no_restart" restarts)
             (swap! state-atom assoc-in [:stats name :status] "down"))
           (when (not watch-only)
-          ;; max 상태에서는 재시작 시도 안 함 (상태만 유지)
-          (when (not (= status "max"))
+          ;; max/stopped 상태에서는 재시작 시도 안 함 (상태만 유지)
+          ;; stopped = 수동 중지 → start 전까지 watchdog 되살리지 않음
+          (when (and (not (= status "max")) (not (= status "stopped")))
             (println (str "[PM] 다운 감지: " name " (재시작 " restarts "/" max-restart ")"))
             ;; ── EVENT: crashed ──────────────────────────────────────
             (tl-append! log-dir name "crashed" "watchdog_down_detected" restarts)
