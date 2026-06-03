@@ -1,4 +1,4 @@
-(load "/home/kimjin/kim/Desktop/kim/01_Active_Projects/freelang-metric-store/metric-store.fl")
+(load "/root/kim/freelang-metric-store/metric-store.fl")
 
 ;; ══════════════════════════════════════════════════════════════════
 ;; TIER 권한 시스템
@@ -251,10 +251,16 @@
     (let [stats  (reduce (fn [acc p]
                            (assoc acc (get p "name") {:restarts 0 :status "starting"}))
                          {} procs)
+          ;; 메트릭 영속화는 선택적 서브시스템 — 실패해도 감시/재시작은 동작.
+          ;; (metric-store는 fd-open "r+" 필요, 현 런타임 미지원 → 별도 태스크)
           stores (reduce (fn [acc p]
                            (let [n    (get p "name")
                                  path (str mpath "/" n ".bin")]
-                             (assoc acc n (metric-open path nil))))
+                             (assoc acc n
+                               (try (metric-open path nil)
+                                    (catch $e
+                                      (do (println (str "[PM] 메트릭 비활성(" n "): " $e))
+                                          nil))))))
                          {} procs)]
       (reset! pm-state {:procs procs :stats stats :stores stores
                         :config (assoc cfg "config_path" config-path)})

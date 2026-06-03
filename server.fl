@@ -1,4 +1,4 @@
-(load "/home/kimjin/kim/Desktop/kim/01_Active_Projects/freelang-pm/pm.fl")
+(load "/root/kim/freelang-pm/pm.fl")
 
 (define PORT 41902)
 
@@ -96,7 +96,7 @@
                             "| grep -oP 'pid=\\K[0-9]+' | head -1")) ""))
           ;; PM2가 알고 있는 현재 PID
           pm2-pid   (str-trim (or (shell-exec
-                       (str "/home/kimjin/.npm-global/bin/pm2 pid " name
+                       (str "pm2 pid " name
                             " 2>/dev/null | tail -1")) ""))]
       (if (nil-or-empty? port-pid)
         {:killed false :reason "포트 비어있음"}
@@ -120,7 +120,7 @@
         ;; 좀비 정리
         kill-res (kill-zombie-on-port name port)
         ;; PM2 reload
-        res      (shell-exec (str "/home/kimjin/.npm-global/bin/pm2 reload " name " 2>&1"))]
+        res      (shell-exec (str "pm2 reload " name " 2>&1"))]
     (tl-append! log-dir name "started" event-label 0)
     (when (get kill-res :killed)
       (tl-append! log-dir name "zombie_killed" (str "port=" port) 0))
@@ -155,7 +155,7 @@
               log-dir (get cfg "log_dir")]
           (if (pm2-managed? proc)
             (do
-              (shell-exec (str "/home/kimjin/.npm-global/bin/pm2 stop " name " 2>&1"))
+              (shell-exec (str "pm2 stop " name " 2>&1"))
               (tl-append! log-dir name "stopped" "manual_stop_pm2" 0)
               (swap! pm-state assoc-in [:stats name :status] "stopped")
               (server-json {"ok" true "stopped" name "via" "pm2"} 200))
@@ -173,7 +173,7 @@
               log-dir (get cfg "log_dir")]
           (if (pm2-managed? proc)
             (do
-              (shell-exec (str "/home/kimjin/.npm-global/bin/pm2 start " name " 2>&1"))
+              (shell-exec (str "pm2 start " name " 2>&1"))
               (tl-append! log-dir name "started" "manual_start_pm2" 0)
               (swap! pm-state assoc-in [:stats name :status] "ok")
               (server-json {"ok" true "started" name "via" "pm2"} 200))
@@ -297,7 +297,7 @@
       (if (nil? proc)
         (server-json {"ok" false "error" "프로세스 없음"} 404)
         (let [;; PM2 로그 수집
-              log-cmd (str "/home/kimjin/.npm-global/bin/pm2 logs " name " --lines 50 --nostream 2>&1")
+              log-cmd (str "pm2 logs " name " --lines 50 --nostream 2>&1")
               log-raw (or (shell-exec log-cmd) "")
               ;; 타임라인에서 최근 이벤트 추출
               log-dir (get (get state :config) "log_dir")
@@ -461,4 +461,4 @@
   (println (str "[PM] HTTP API: http://localhost:" PORT))
   (server-start PORT))
 
-(start-server "/home/kimjin/kim/Desktop/kim/01_Active_Projects/freelang-pm/examples/services.json")
+(start-server "/root/kim/freelang-pm/examples/services.json")

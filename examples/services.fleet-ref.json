@@ -1,0 +1,508 @@
+{
+  "tiers": {
+    "0": {
+      "name": "LOCKED",
+      "desc": "DB/인프라 — 모든 조작 차단",
+      "color": "#ff5252",
+      "allow": [
+        "status",
+        "metrics"
+      ],
+      "confirm": [],
+      "deny": [
+        "start",
+        "stop",
+        "restart",
+        "delete"
+      ]
+    },
+    "1": {
+      "name": "PROTECTED",
+      "desc": "핵심 서비스 — restart 허가 필요",
+      "color": "#ffab40",
+      "allow": [
+        "status",
+        "metrics"
+      ],
+      "confirm": [
+        "restart"
+      ],
+      "deny": [
+        "stop",
+        "delete"
+      ]
+    },
+    "2": {
+      "name": "NORMAL",
+      "desc": "일반 앱 — restart/stop 허용, delete 허가",
+      "color": "#ffee58",
+      "allow": [
+        "status",
+        "metrics",
+        "restart",
+        "stop"
+      ],
+      "confirm": [
+        "delete"
+      ],
+      "deny": []
+    },
+    "3": {
+      "name": "DEV",
+      "desc": "개발/테스트 — 전체 허용",
+      "color": "#00e676",
+      "allow": [
+        "status",
+        "metrics",
+        "restart",
+        "stop",
+        "delete",
+        "start"
+      ],
+      "confirm": [],
+      "deny": []
+    }
+  },
+  "confirm_token": "flpm-confirm-2026",
+  "processes": [
+    {
+      "name": "kimdb-fl",
+      "health_url": "http://localhost:40002/health",
+      "tier": 0,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "watch_only": true,
+      "note": "PM2 관리 — freelang-pm은 감시만"
+    },
+    {
+      "name": "dclub-tasks",
+      "cmd": "node /home/kimjin/freelang-v11/bootstrap.js run /home/kimjin/kim/Desktop/kim/01_Active_Projects/dclub-tasks/app/main.fl",
+      "health_url": "http://localhost:30367/health",
+      "tier": 1,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-hq",
+      "cmd": "node /home/kimjin/freelang-v11/bootstrap.js run /home/kimjin/kim/Desktop/kim/akl/akl-hq/app/server.fl",
+      "health_url": "http://localhost:39027/health",
+      "tier": 1,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "dispatch-app",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/01_Active_Projects/dispatch-app/bootstrap-wrapper.js",
+      "health_url": "http://localhost:40105/",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 3,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-account",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-account/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39026/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-accounting",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-accounting/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39013/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-admin",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-admin/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39002/health",
+      "tier": 1,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-analytics",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-analytics/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39005/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-api",
+      "cmd": "node /home/kimjin/freelang-v11/bootstrap.js run /home/kimjin/kim/Desktop/kim/akl/akl-api/app/server.fl",
+      "health_url": "http://localhost:39000/health",
+      "tier": 1,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-audit",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-audit/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39006/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-billing",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/01_Active_Projects/akl-billing/bootstrap-wrapper.js",
+      "health_url": "http://localhost:40315/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-blog",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-blog/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39044/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-bookmark",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/01_Active_Projects/akl-bookmark/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39035/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-budget",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/01_Active_Projects/akl-budget/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39033/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-calendar",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/01_Active_Projects/akl-calendar/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39031/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-client",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-client/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39024/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-community",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-community/bootstrap-wrapper.js",
+      "health_url": "http://localhost:30200/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-community-ws",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-community-ws/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39022/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-crm",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-crm/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39010/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true,
+      "watch_only": true,
+      "note": "PM2 관리 (akl-crm) — freelang-pm은 감시만"
+    },
+    {
+      "name": "akl-edu",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-edu/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39042/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-estimate",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-estimate/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39012/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-habit",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/01_Active_Projects/akl-habit/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39038/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-hike",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-hike/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39061/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-hr",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-hr/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39015/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-inventory",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-inventory/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39014/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true,
+      "note": "기존 장애: 포트 39014 충돌, PM2 9765회 재시작 실패"
+    },
+    {
+      "name": "akl-journal",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-journal/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39034/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-marketing",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/01_Active_Projects/akl-marketing/bootstrap-wrapper.js",
+      "health_url": "http://localhost:40317/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-media",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/01_Active_Projects/akl-media/bootstrap-wrapper.js",
+      "health_url": "http://localhost:40311/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-mindmap",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-mindmap/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39055/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-move",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-move/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39060/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-note",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/01_Active_Projects/akl-note/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39030/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-notify",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-notify/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39004/health",
+      "tier": 1,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-partner",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-partner/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39025/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-payment",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/01_Active_Projects/akl-payment/bootstrap-wrapper.js",
+      "health_url": "http://localhost:40313/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-people",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-people/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39045/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-pomodoro",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-pomodoro/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39039/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-project",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-project/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39016/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-search",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/01_Active_Projects/akl-search/bootstrap-wrapper.js",
+      "health_url": "http://localhost:40312/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-shared",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-shared/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39046/health",
+      "tier": 1,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-shop",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-shop/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39020/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-social",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/01_Active_Projects/akl-social/bootstrap-wrapper.js",
+      "health_url": "http://localhost:40316/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-storage",
+      "health_url": "http://localhost:3000/",
+      "tier": 0,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "watch_only": true,
+      "note": "Node.js 미구현 (port 3000, status=todo) — 비활성"
+    },
+    {
+      "name": "akl-subscription",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/01_Active_Projects/akl-subscription/bootstrap-wrapper.js",
+      "health_url": "http://localhost:40314/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-support",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-support/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39023/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-timetrack",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-timetrack/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39037/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-wiki",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-wiki/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39036/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-writer",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-writer/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39043/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    },
+    {
+      "name": "akl-writing",
+      "cmd": "node /home/kimjin/kim/Desktop/kim/akl/akl-writing/bootstrap-wrapper.js",
+      "health_url": "http://localhost:39054/health",
+      "tier": 2,
+      "check_interval_ms": 30000,
+      "max_restarts": 0,
+      "pm2_managed": true
+    }
+  ],
+  "metric_path": "/tmp/flpm-metrics",
+  "log_dir": "/tmp/flpm-logs",
+  "pid_dir": "/tmp/flpm-pids",
+  "check_interval_ms": 30000
+}
