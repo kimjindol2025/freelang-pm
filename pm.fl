@@ -128,9 +128,11 @@
 (defn pm-start [proc log-dir pid-dir]
   (let [name    (get proc "name")
         cmd     (get proc "cmd")
+        cwd     (get proc "cwd")
         logf    (str log-dir "/" name ".log")
         pidf    (pid-file name pid-dir)
-        full    (str "setsid sh -c '" cmd " >> " logf " 2>&1 & echo $!'")
+        cd-part (if (nil-or-empty? cwd) "" (str "cd \"" cwd "\" && "))
+        full    (str "setsid sh -c '" cd-part cmd " >> " logf " 2>&1 & echo $!'")
         result  (shell-exec-result full)
         pid     (str-trim (get result "stdout"))]
     (if (and (get result "ok") (not (str-blank? pid)))
@@ -166,7 +168,7 @@
         health-url (get proc "health_url")]
     (if (nil-or-empty? health-url)
       (pm-alive? name pid-dir)
-      (let [result (shell-exec-result (str "wget -q -O /dev/null --timeout=2 '" health-url "' 2>/dev/null"))]
+      (let [result (shell-exec-result (str "curl -s -o /dev/null --max-time 2 '" health-url "' 2>/dev/null"))]
         (get result "ok")))))
 
 ;; ── 메트릭 기록 (숫자 시계열) ────────────────────────────────────────
@@ -266,14 +268,16 @@
       (reset! pm-state {:procs procs :stats stats :stores stores
                         :config (assoc cfg "config_path" config-path)})
       ;; 초기 기동 + 시작 이벤트
+      ;; watch_only=true 서비스는 PM2가 관리 → 기동 건너뜀
       (doseq [proc procs]
-        (let [name (get proc "name")]
-          (when (not (pm-alive? name pid-dir))
+        (let [name       (get proc "name")
+              watch-only (or (get proc "watch_only") false)]
+          (when (and (not watch-only) (not (pm-alive? name pid-dir)))
             (pm-start proc log-dir pid-dir)
             (tl-append! log-dir name "started" "pm_initial_start" 0)
             (swap! pm-state assoc-in [:stats name :status] "ok"))))
       ;; 감시 루프
       ;; 기본 30초 (서비스 52개 × HTTP → 10초는 너무 짧음)
       (let [ms (if (nil-or-empty? interval) 30000 interval)]
-        (fl-set-interval ms "pm-run-check")
+        (set-interval "pm-run-check" ms)
         (println (str "[PM] 감시 시작 — " (length procs) "개 프로세스, " ms "ms 간격"))))))

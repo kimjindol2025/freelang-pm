@@ -1,0 +1,453 @@
+{
+  "tiers": {
+    "0": {
+      "name": "LOCKED",
+      "desc": "DB/인프라 — 모든 조작 차단",
+      "color": "#ff5252",
+      "allow": [
+        "status",
+        "metrics"
+      ],
+      "confirm": [],
+      "deny": [
+        "start",
+        "stop",
+        "restart",
+        "delete"
+      ]
+    },
+    "1": {
+      "name": "PROTECTED",
+      "desc": "핵심 서비스 — restart 허가 필요",
+      "color": "#ffab40",
+      "allow": [
+        "status",
+        "metrics"
+      ],
+      "confirm": [
+        "restart"
+      ],
+      "deny": [
+        "stop",
+        "delete"
+      ]
+    },
+    "2": {
+      "name": "NORMAL",
+      "desc": "일반 앱 — restart/stop 허용, delete 허가",
+      "color": "#ffee58",
+      "allow": [
+        "status",
+        "metrics",
+        "restart",
+        "stop"
+      ],
+      "confirm": [
+        "delete"
+      ],
+      "deny": []
+    },
+    "3": {
+      "name": "DEV",
+      "desc": "개발/테스트 — 전체 허용",
+      "color": "#00e676",
+      "allow": [
+        "status",
+        "metrics",
+        "restart",
+        "stop",
+        "delete",
+        "start"
+      ],
+      "confirm": [],
+      "deny": []
+    }
+  },
+  "confirm_token": "flpm-confirm-2026",
+  "metric_path": "/tmp/fl-pm-data/metrics",
+  "log_dir": "/tmp/fl-pm-data/logs",
+  "pid_dir": "/tmp/fl-pm-data/pids",
+  "check_interval_ms": 30000,
+  "processes": [
+    {
+      "name": "kimdb",
+      "tier": 0,
+      "max_restarts": 5,
+      "pm2_managed": true,
+      "cmd": "/home/kimjin/kim/kimdb-fl/server.js",
+      "cwd": "/home/kimjin/kim/kimdb-fl",
+      "watch_only": true,
+      "health_url": "http://localhost:40000/health"
+    },
+    {
+      "name": "kimjin-pm2-relay",
+      "tier": 0,
+      "max_restarts": 5,
+      "pm2_managed": true,
+      "cmd": "/home/kimjin/pm2-relay.js",
+      "cwd": "/home/kimjin/carwash-permit",
+      "watch_only": true,
+      "health_url": "http://localhost:50502/"
+    },
+    {
+      "name": "sudo-bridge",
+      "tier": 0,
+      "max_restarts": 5,
+      "pm2_managed": true,
+      "cmd": "/home/kimjin/services/sudo-bridge/server.js",
+      "cwd": "/home/kimjin/services/sudo-bridge",
+      "watch_only": true,
+      "health_url": "http://localhost:50503/health"
+    },
+    {
+      "name": "kimdb-fl",
+      "tier": 0,
+      "max_restarts": 5,
+      "pm2_managed": true,
+      "cmd": "/home/kimjin/kim/kimdb-fl/server.js",
+      "cwd": "/home/kimjin/kim/kimdb-fl",
+      "watch_only": true,
+      "health_url": "http://localhost:40000/health"
+    },
+    {
+      "name": "dcloud-base",
+      "tier": 0,
+      "max_restarts": 5,
+      "pm2_managed": true,
+      "cmd": "/home/kim/바탕화면/kim/freelang-v11/bootstrap.js run /tmp/dclub-base/app/server.fl",
+      "cwd": "/tmp/dclub-base",
+      "watch_only": true,
+      "health_url": "http://localhost:42781/health"
+    },
+    {
+      "name": "dcloud-tasks",
+      "tier": 0,
+      "max_restarts": 5,
+      "pm2_managed": true,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run /home/kimjin/services/dcloud-tasks/app/main.fl",
+      "cwd": "/home/kimjin/services/dcloud-tasks",
+      "watch_only": true,
+      "health_url": "http://localhost:30034/"
+    },
+    {
+      "name": "estimate2",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/npm start",
+      "cwd": "/home/kimjin/services/esm.dclub.kr"
+    },
+    {
+      "name": "akl-home",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/npm run start",
+      "cwd": "/home/kimjin/kim/Desktop/kim/akl/akl-home"
+    },
+    {
+      "name": "freelang-blog",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang_blog/api-server.js --env NODE_ENV=production",
+      "cwd": "/home/kimjin/freelang_blog"
+    },
+    {
+      "name": "akl-estimate",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/services/akl-estimate"
+    },
+    {
+      "name": "akl-account",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/services/akl-account"
+    },
+    {
+      "name": "akl-admin",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/services/akl-admin"
+    },
+    {
+      "name": "akl-analytics",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/services/akl-analytics"
+    },
+    {
+      "name": "akl-audit",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/services/akl-audit"
+    },
+    {
+      "name": "akl-community-ws",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/services/akl-community-ws"
+    },
+    {
+      "name": "akl-hq",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/services/akl-hq"
+    },
+    {
+      "name": "akl-hr",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/services/akl-hr"
+    },
+    {
+      "name": "akl-inventory",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run src/api/server.fl",
+      "cwd": "/home/kimjin/services/akl-inventory"
+    },
+    {
+      "name": "akl-notify",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/services/akl-notify"
+    },
+    {
+      "name": "akl-partner",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/services/akl-partner"
+    },
+    {
+      "name": "akl-project",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/services/akl-project"
+    },
+    {
+      "name": "akl-shared",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/services/akl-shared"
+    },
+    {
+      "name": "akl-support",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/services/akl-support"
+    },
+    {
+      "name": "akl-client",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/services/akl-client"
+    },
+    {
+      "name": "akl-storage",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/services/akl-storage"
+    },
+    {
+      "name": "akl-crm",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/services/akl-crm"
+    },
+    {
+      "name": "akl-hike",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/services/akl-hike"
+    },
+    {
+      "name": "akl-move",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/services/akl-move"
+    },
+    {
+      "name": "akl-people",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/services/akl-people"
+    },
+    {
+      "name": "bigwash-contract",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run src/server.fl",
+      "cwd": "/home/kimjin/services/bigwash-contract"
+    },
+    {
+      "name": "akl-blog",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/Personal Suite/akl-blog"
+    },
+    {
+      "name": "akl-edu",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/Personal Suite/akl-edu"
+    },
+    {
+      "name": "akl-journal",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/Personal Suite/akl-journal"
+    },
+    {
+      "name": "akl-mindmap",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/Personal Suite/akl-mindmap"
+    },
+    {
+      "name": "akl-pomodoro",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/Personal Suite/akl-pomodoro"
+    },
+    {
+      "name": "akl-timetrack",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/Personal Suite/akl-timetrack"
+    },
+    {
+      "name": "akl-wiki",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/Personal Suite/akl-wiki"
+    },
+    {
+      "name": "akl-writer",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/Personal Suite/akl-writer"
+    },
+    {
+      "name": "akl-writing",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/Personal Suite/akl-writing"
+    },
+    {
+      "name": "akl-bookmark",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/Personal Suite/akl-bookmark"
+    },
+    {
+      "name": "akl-budget",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/Personal Suite/akl-budget"
+    },
+    {
+      "name": "akl-calendar",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/Personal Suite/akl-calendar"
+    },
+    {
+      "name": "akl-habit",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/Personal Suite/akl-habit"
+    },
+    {
+      "name": "akl-note",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/Personal Suite/akl-note"
+    },
+    {
+      "name": "dispatch-app",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run app/server.fl",
+      "cwd": "/home/kimjin/services/dispatch-app"
+    },
+    {
+      "name": "akl-api",
+      "tier": 2,
+      "max_restarts": 5,
+      "pm2_managed": false,
+      "cmd": "/usr/bin/node /home/kimjin/freelang-v11/bootstrap.js run src/main.fl",
+      "cwd": "/home/kimjin/services/akl-api"
+    }
+  ]
+}
